@@ -1,0 +1,36 @@
+{
+  "name": "agile-pixel-products",
+  "description": "Skills for Agile Pixel's products, starting with All's Well uptime monitoring",
+  "owner": {
+    "name": "Agile Pixel Ltd",
+    "url": "https://agilepixel.io"
+  },
+  "plugins": [
+    {
+      "name": "alls-well",
+      "displayName": "All's Well",
+      "description": "Set up uptime, SSL certificate and heartbeat monitoring for a project with All's Well, kept in the repository as alls-well.json",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/alls-well"
+      ],
+      "author": {
+        "name": "Agile Pixel Ltd",
+        "url": "https://agilepixel.io"
+      },
+      "homepage": "https://alls-well.io/docs/api/agent-skill",
+      "repository": "https://github.com/agilepixel/agent-skills",
+      "license": "MIT",
+      "keywords": [
+        "monitoring",
+        "uptime",
+        "ssl",
+        "heartbeat",
+        "cron",
+        "alerts"
+      ],
+      "category": "monitoring"
+    }
+  ]
+}
