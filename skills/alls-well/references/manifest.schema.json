@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alls-well.io/docs/api/skill/references/manifest.schema.json",
+  "title": "All's Well project manifest",
+  "description": "A project's All's Well monitors and alert contacts, applied with alls_well_sync.py.",
+  "type": "object",
+  "required": ["project", "monitors"],
+  "if": {"not": {"required": ["notify"]}},
+  "then": {"properties": {"monitors": {"items": {"required": ["notify"]}}}},
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique in the team. Every monitor is named '<project>: <name>'."
+    },
+    "url": {
+      "type": "string",
+      "pattern": "^https?://[^/\\s]+/?$",
+      "description": "The All's Well instance, when it isn't https://alls-well.io. ALLS_WELL_URL overrides it."
+    },
+    "notify": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Contact names alerted by monitors that don't set their own notify. Without it, every monitor must set its own; [] alerts nobody on purpose."
+    },
+    "contacts": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/contact"}
+    },
+    "monitors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/monitor"}
+    }
+  },
+  "$defs": {
+    "contact": {
+      "type": "object",
+      "required": ["name", "type", "config"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 255},
+        "type": {"enum": ["email", "slack", "discord", "webhook", "telegram"]},
+        "config": {
+          "type": "object",
+          "description": "email: {email}; slack, discord: {webhook_url}; webhook: {url}; telegram: {bot_token, chat_id}. Use ${VAR} for secrets.",
+          "additionalProperties": false,
+          "properties": {
+            "email": {"type": "string"},
+            "webhook_url": {"type": "string"},
+            "url": {"type": "string"},
+            "bot_token": {"type": "string"},
+            "chat_id": {"type": ["string", "integer"]}
+          }
+        },
+        "notify_on_down": {"type": "boolean", "default": true},
+        "notify_on_recovery": {"type": "boolean", "default": true}
+      }
+    },
+    "monitor": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 200},
+        "type": {"enum": ["http", "ssl", "heartbeat", "keyword", "tcp", "icmp"]},
+        "url": {"type": "string", "description": "A full URL; tcp and icmp use only its host. Leave out for heartbeat."},
+        "check_interval_minutes": {"enum": [1, 5, 15, 30, 60], "default": 5},
+        "check_interval_seconds": {"type": ["integer", "null"], "minimum": 30, "description": "Overrides the minutes; null removes the override."},
+        "is_active": {"type": "boolean"},
+        "notify": {"type": "array", "items": {"type": "string"}, "description": "Replaces the top-level notify for this monitor. [] alerts nobody."},
+        "http_method": {"enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]},
+        "expected_status_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "integer", "minimum": 100, "maximum": 599}
+        },
+        "expected_keyword": {"type": "string", "maxLength": 255},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "request_timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60},
+        "request_headers": {"type": "object", "additionalProperties": {"type": "string"}},
+        "username": {"type": "string", "maxLength": 255},
+        "password": {"type": "string", "maxLength": 255},
+        "ssl_expiry_warning_days": {"type": "integer", "minimum": 1, "maximum": 90}
+      }
+    }
+  }
+}

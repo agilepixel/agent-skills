@@ -1,0 +1,37 @@
+name: Sync skills
+
+# Each skill is maintained in its product's repository and served by the
+# product in production. This copies what is served, so the copies here
+# always match the live product they describe.
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-skills
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch each skill
+        run: .github/scripts/sync-skills.sh
+
+      - name: Commit any change
+        run: |
+          git add -A skills
+          if git diff --cached --quiet; then
+            echo "Every skill is up to date."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore: sync skills from production" -m "$(git diff --cached --stat)"
+          git push

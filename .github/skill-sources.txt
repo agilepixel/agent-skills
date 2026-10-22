@@ -1,0 +1,4 @@
+# One skill per line: its name, then the base URL its product serves it
+# from. The base URL serves files.txt (every file's path, one per line)
+# and each of those files beneath it.
+alls-well https://alls-well.io/docs/api/skill
