@@ -9,11 +9,12 @@
     {
       "name": "alls-well",
       "displayName": "All's Well",
-      "description": "Set up uptime, SSL certificate and heartbeat monitoring for a project with All's Well, kept in the repository as alls-well.json",
+      "description": "Set up uptime, SSL certificate and heartbeat monitoring for a project with All's Well, kept in the repository as alls-well.json, and let its checks through Cloudflare's bot protection",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/alls-well"
+        "./skills/alls-well",
+        "./skills/cloudflare-allowlist"
       ],
       "author": {
         "name": "Agile Pixel Ltd",
@@ -28,7 +29,9 @@
         "ssl",
         "heartbeat",
         "cron",
-        "alerts"
+        "alerts",
+        "cloudflare",
+        "waf"
       ],
       "category": "monitoring"
     }
