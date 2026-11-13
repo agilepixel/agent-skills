@@ -1,6 +1,6 @@
 ---
 name: cloudflare-allowlist
-description: Use when an All's Well monitor says "Bot protection is blocking these checks", or a check fails with 401, 403 or 429 while the site works in a browser, and the site is behind Cloudflare; or when asked to allow-list All's Well or another Agile Pixel service in Cloudflare's WAF, Bot Fight Mode, Super Bot Fight Mode, Under Attack mode or security level. Finds the checker's addresses in Cloudflare's Security Events and adds one skip rule through the Cloudflare MCP server, the cf CLI or the API.
+description: Use when an All's Well monitor or its checks report the status `blocked`, or its page says "Bot protection is blocking these checks", or a check fails with 401, 403 or 429 while the site works in a browser, and the site is behind Cloudflare; or when asked to allow-list All's Well or another Agile Pixel service in Cloudflare's WAF, Bot Fight Mode, Super Bot Fight Mode, Under Attack mode or security level. Finds the checker's addresses in Cloudflare's Security Events and adds one skip rule through the Cloudflare MCP server, the cf CLI or the API.
 ---
 
 # Let Agile Pixel Services Through Cloudflare
@@ -9,9 +9,14 @@ You get Agile Pixel's services past Cloudflare's protection on a site without we
 
 ## When This Applies
 
+- All's Well reports a monitor or its checks as `blocked`: in the API, `status` from `GET /api/v1/monitors/{id}` and `GET /api/v1/monitors/{id}/checks`; over its MCP server, `get-monitor`, `list-monitors` and `list-recent-checks`
 - All's Well shows **Bot protection is blocking these checks** on a monitor, or a check fails with 401, 403 or 429 while the page loads in a browser
 - The person asks to allow-list or whitelist All's Well, or another Agile Pixel service, in Cloudflare
 - You are setting up All's Well monitors (the `alls-well` skill) for a host served through Cloudflare and its zone has Bot Fight Mode, Super Bot Fight Mode, Under Attack mode or its own block or challenge rules: offer the rule before the first check fails
+
+`blocked` means the site's bot protection answered the check with a challenge, so All's Well can't tell whether the site is up. No incident opens and nobody is told the site is down, so an outage behind the challenge goes unnoticed until the checks get through.
+
+**When the monitor's `proving` isn't null, fix this first.** A monitor that All's Well's API or MCP created, or whose check it changed, proves itself before it alerts anyone but the token's owner, and only `up` or `degraded` checks count towards that. While it is `blocked` it can't prove itself, and its held contacts (`held: true` in `notification_contacts`) lapse at `proving.lapses_at`, 7 days after it was switched on: they are dropped without ever being attached, and the token's owner gets an email. Tell the person that date.
 
 This skill covers Cloudflare only. For another CDN or firewall service (Sucuri, Imperva, Akamai, AWS WAF), the host's own protection or a WordPress security plugin, give the person the steps All's Well shows on the monitor's page.
 
@@ -157,7 +162,13 @@ Use `"target": "ip6"` for an IPv6 address. This is broader than the skip rule: i
    | Custom rules, but not this one | Add the rule to the ruleset |
    | No custom rules (`404`) | Create the ruleset: `{"name": "default", "kind": "zone", "phase": "http_request_firewall_custom", "rules": [<the rule without "position">]}` |
 
-5. **Check**. After the monitor's next check, run step 2's query again: the checker's events now show the action `skip`. IP Access allows don't appear in Security Events, so for those, check the monitor instead. All's Well picks up again on its own at the next check that gets through.
+5. **Check**. After the monitor's next check, run step 2's query again: the checker's events now show the action `skip`. IP Access allows don't appear in Security Events, so for those, rely on All's Well alone. Then read the monitor's latest checks in All's Well (`GET /api/v1/monitors/{id}/checks`, or `list-recent-checks` over MCP). Checks run at the monitor's interval, so wait one interval after the fix. The monitor itself (`GET /api/v1/monitors/{id}`, or `get-monitor`) shows its `status` and how far it has got in `proving.good_checks`:
+
+   | Its newest checks are | It means |
+   |---|---|
+   | `up` or `degraded` | The checks get through, and the monitor's `status` follows. A monitor that was proving needs 3 of these in a row, so about three intervals; any other result starts the count again. Then `proving` is null and its held contacts are attached. Tell the person |
+   | `down` | Only a challenge makes a check `blocked`; a Cloudflare block still shows as `down`. If step 2's query shows new events other than `skip` for the checker, go back to step 4 for that `source`. If it shows none, the checks get through and this is the site's real answer: fix the URL or keyword, not Cloudflare |
+   | Still `blocked` | Something else challenges them. Run step 2 again for the `source` that acts now, and go back to step 4. With no Cloudflare events, the challenge comes from the origin: hand over the monitor page's steps |
 
 If the project manages Cloudflare with Terraform (`cloudflare_ruleset` resources) or another tool, add the rule there instead: the next apply would remove a rule added through the API.
 
@@ -190,6 +201,9 @@ When the person, or whoever owns the Cloudflare account, has to add it in the da
 
 | Question | Answer |
 |---|---|
+| All's Well says `blocked`? | Bot protection challenged the checks: this skill applies when Cloudflare is in front |
+| How long until it matters? | A monitor whose `proving` isn't null loses its held contacts at `proving.lapses_at` |
+| Did the fix work? | Security Events show `skip`, and the monitor's newest checks are `up`; 3 in a row prove a proving monitor |
 | Is Cloudflare in front? | `server: cloudflare` and `cf-ray`; a challenge adds `cf-mitigated: challenge` |
 | The checker's user agent? | `AllsWell/1.0 AgileMonitor/1.0 (+https://alls-well.io)` |
 | The checker's addresses? | The failing monitor's page in All's Well, matched with Security Events |

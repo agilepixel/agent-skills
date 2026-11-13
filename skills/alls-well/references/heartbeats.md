@@ -26,6 +26,8 @@ Schedule::command('backup:run')->dailyAt('02:00')
 
 While a heartbeat is paused, its pings get a `404`, which the scheduler logs. Switch it on right after deploying.
 
+A heartbeat the sync created proves itself with its first on-time ping after it is switched on. Until then its alerts go only to the token's owner and its `notify` contacts are held; they are attached by that ping. If no ping arrives within 7 days of it being switched on, the held contacts lapse and the token's owner gets an email.
+
 ### Queued jobs
 
 When the job implements `ShouldQueue`, `Schedule::job(new PruneCarts)` only dispatches it; a ping from the scheduler proves the dispatch, not that a worker ran it. Ping from the end of the job's `handle()` instead. (A job without `ShouldQueue` runs inside the scheduler, so `pingOnSuccessIf` on the schedule is enough.)

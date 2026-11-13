@@ -3,15 +3,16 @@
 
     python3 alls_well_sync.py validate            # check the manifest; no network
     python3 alls_well_sync.py plan                # show what apply would change
-    python3 alls_well_sync.py plan --check        # exit 2 if anything would change (CI)
+    python3 alls_well_sync.py plan --check        # exit 2 if a monitor or contact would change (CI)
     python3 alls_well_sync.py apply               # create and update
     python3 alls_well_sync.py apply --prune       # also delete this project's unlisted monitors
     python3 alls_well_sync.py apply --env-file .alls-well.env   # write heartbeat ping URLs there (ignored by git)
 
 Reads ALLS_WELL_TOKEN (a team API token). The instance is ALLS_WELL_URL,
-else the manifest's "url", else https://alls-well.io. Monitors are matched by name, prefixed with the
-manifest's "project", so only this project's monitors are ever changed or
-pruned. Contacts are matched by name and never deleted. Strings may use
+else the manifest's "url", else https://alls-well.io. The manifest's "project" is an All's Well project, created when
+the team has none, and every monitor goes in it. When the team can't have one (its plan's project limit, or a
+token that may not create projects), monitors are synced without it. Monitors are matched by name, prefixed with the
+project, so only this project's monitors are ever changed or pruned. Contacts are matched by name and never deleted. Strings may use
 ${ENV_VAR}, so secrets such as webhook URLs stay out of the repository.
 
 Python 3.9 or later, standard library only. Exit codes: 0 done, 1 error,
@@ -47,11 +48,17 @@ MONITOR_FIELDS = (
     'expected_status_codes', 'expected_keyword', 'port', 'request_timeout_seconds',
     'request_headers', 'username', 'ssl_expiry_warning_days',
 )
+NO_PROJECTS = "This All's Well server doesn't support projects yet; monitors are synced without one."
 ENV_PATTERN = re.compile(r'\$\{([A-Z_][A-Z0-9_]*)\}')
 
 
 class SyncError(Exception):
     """A problem the user must fix; printed without a traceback."""
+
+    def __init__(self, message: str, status: int | None = None, problem: dict | None = None):
+        super().__init__(message)
+        self.status = status
+        self.problem = problem or {}
 
 
 # ---------------------------------------------------------------- manifest
@@ -80,7 +87,7 @@ def validate_manifest(manifest: object) -> list[str]:
     problems = []
     project = manifest.get('project')
     if not isinstance(project, str) or not project.strip():
-        problems.append('"project" is required: a short name that prefixes every monitor, such as "Northwind shop"')
+        problems.append('"project" is required: the All\'s Well project, and the prefix of every monitor, such as "Northwind shop"')
     if 'url' in manifest and not (isinstance(manifest['url'], str) and re.match(r'^https?://[^/\s]+/?$', manifest['url'])):
         problems.append('"url" must be the All\'s Well instance, such as https://alls-well.io')
 
@@ -113,9 +120,9 @@ def validate_manifest(manifest: object) -> list[str]:
                 problems.append(f'{where}.{flag} must be true or false')
 
     names = set()
-    monitors = manifest.get('monitors')
-    if not isinstance(monitors, list) or not monitors:
-        problems.append('"monitors" must list at least one monitor')
+    monitors = manifest.get('monitors', [])
+    if not isinstance(monitors, list):
+        problems.append('"monitors" must be a list of monitors')
         monitors = []
     for index, monitor in enumerate(monitors):
         where = f'monitors[{index}]'
@@ -161,10 +168,11 @@ def validate_manifest(manifest: object) -> list[str]:
     for index, monitor in enumerate(monitors):
         if not isinstance(monitor, dict):
             continue
-        # A monitor with no contacts alerts every contact on the team, so that has to be said with "notify": [].
+        # A monitor with no contacts alerts every confirmed contact on the team, so that has to be said with "notify": [].
         if 'notify' not in monitor and 'notify' not in manifest:
-            problems.append(f'monitors[{index}] ("{monitor.get("name")}") alerts nobody: set a top-level "notify" '
-                            'or the monitor\'s own, or "notify": [] if nobody should be alerted')
+            problems.append(f'monitors[{index}] ("{monitor.get("name")}") names no contacts: set a top-level "notify" '
+                            'or the monitor\'s own, or "notify": [] to alert every confirmed contact on the team '
+                            'once it is proven')
         for contact in monitor.get('notify', notify):
             if not isinstance(contact, str):
                 problems.append(f'monitors[{index}].notify must list contact names')
@@ -219,7 +227,8 @@ class Api:
                 print(f'  rate limited; waiting {wait}s', file=sys.stderr)
                 time.sleep(wait)
                 return self.request(method, path, body, retry=False)
-            raise SyncError(describe_problem(error, method, url))
+            problem = read_problem(error)
+            raise SyncError(describe_problem(error, problem, method, url), status=error.code, problem=problem)
         except urllib.error.URLError as error:
             raise SyncError(f'{method} {url} failed: {error.reason}. Check ALLS_WELL_URL.')
 
@@ -237,13 +246,24 @@ class Api:
     def team(self) -> dict:
         return self.request('GET', '/team')['data']
 
+    def find_project(self, name: str) -> dict | None:
+        found = self.request('GET', '/projects?match=' + urllib.parse.quote(name, safe=''))['data']
+        return found[0] if found else None
 
-def describe_problem(error: urllib.error.HTTPError, method: str, url: str) -> str:
+    def ensure_project(self, name: str) -> dict:
+        """The project called name, created when the team has none."""
+        return self.find_project(name) or self.request('POST', '/projects', {'name': name})['data']
+
+
+def read_problem(error: urllib.error.HTTPError) -> dict:
     try:
         problem = json.loads(error.read() or b'{}')
     except json.JSONDecodeError:
-        problem = {}
+        return {}
+    return problem if isinstance(problem, dict) else {}
 
+
+def describe_problem(error: urllib.error.HTTPError, problem: dict, method: str, url: str) -> str:
     lines = [f'{method} {url} answered {error.code} {problem.get("title", error.reason)}']
     if problem.get('detail'):
         lines.append(f'  {problem["detail"]}')
@@ -253,6 +273,9 @@ def describe_problem(error: urllib.error.HTTPError, method: str, url: str) -> st
         lines.append('  The token is missing, wrong or revoked. Create one in Settings, API tokens and export ALLS_WELL_TOKEN.')
     elif error.code == 403:
         lines.append('  The token may not do this: it needs an Owner or Admin of the team.')
+    elif error.code == 402 and 'max_projects' in problem:
+        lines.append(f'  The plan ({problem.get("plan", "?")}) allows {problem["max_projects"]} projects. '
+                     'Delete a project or upgrade the plan.')
     elif error.code == 402:
         lines.append(f'  The plan ({problem.get("plan", "?")}) allows {problem.get("max_monitors", "?")} monitors. '
                      'Remove monitors from the manifest or upgrade the plan.')
@@ -272,10 +295,16 @@ def desired_monitor(project: str, monitor: dict, default_notify: list[str]) -> d
     return wanted
 
 
-def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: list[dict], prune: bool) -> list[dict]:
+def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: list[dict], prune: bool,
+                 remote_project: dict | None = None, link_project: bool = False) -> list[dict]:
+    """What apply would do. With link_project, monitors belong in the All's Well project: remote_project, or the one apply creates first."""
     project = manifest['project'].strip()
     prefix = f'{project}: '
     actions = []
+    project_key = remote_project['key'] if remote_project else None
+
+    if link_project and remote_project is None:
+        actions.append({'action': 'create', 'kind': 'project', 'name': project, 'body': {'name': project}})
 
     by_name = {contact['name']: contact for contact in remote_contacts}
     for contact in manifest.get('contacts', []):
@@ -303,7 +332,7 @@ def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: l
     remote = {monitor['name']: monitor for monitor in remote_monitors if monitor['name'].startswith(prefix)}
     default_notify = manifest.get('notify', [])
 
-    for monitor in manifest['monitors']:
+    for monitor in manifest.get('monitors', []):
         wanted = desired_monitor(project, monitor, default_notify)
         unknown = [name for name in wanted['notify'] if name not in known_contacts]
         if unknown:
@@ -312,6 +341,8 @@ def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: l
 
         existing = remote.pop(wanted['name'], None)
         if existing is None:
+            if link_project:
+                wanted['project'] = project_key
             actions.append({'action': 'create', 'kind': 'monitor', 'name': wanted['name'], 'body': wanted})
             continue
         if existing['type'] != wanted['type']:
@@ -325,6 +356,9 @@ def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: l
             changes['check_interval_seconds'] = wanted['check_interval_seconds']
         if 'password' in wanted and wanted['password'] and not existing.get('has_password'):
             changes['password'] = wanted['password']
+        current_project = (existing.get('project') or {}).get('key')
+        if link_project and (project_key is None or current_project != project_key):
+            changes['project'] = project_key
         current = sorted(contact['name'] for contact in existing.get('notification_contacts', []))
         if sorted(wanted['notify']) != current:
             changes['notify'] = wanted['notify']
@@ -332,8 +366,10 @@ def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: l
             before = {field: existing.get(field) for field in changes if field != 'password'}
             if 'notify' in changes:
                 before['notify'] = current
+            if 'project' in changes:
+                before['project'] = (existing.get('project') or {}).get('name')
             actions.append({'action': 'update', 'kind': 'monitor', 'name': wanted['name'], 'id': existing['id'],
-                            'body': changes, 'before': before})
+                            'body': changes, 'before': before, 'project_name': project})
 
     for name, existing in sorted(remote.items()):
         actions.append({'action': 'delete' if prune else 'orphan', 'kind': 'monitor', 'name': name, 'id': existing['id']})
@@ -341,8 +377,10 @@ def plan_changes(manifest: dict, remote_monitors: list[dict], remote_contacts: l
     return actions
 
 
-def describe(action: dict) -> str:
+def describe(action: dict, planned: bool = False) -> str:
     kind, name = action['kind'], action['name']
+    if kind == 'project':
+        return f'+ {"would create" if planned else "create"} project "{name}"'
     if action['action'] == 'create':
         body = action['body']
         details = [f'{body["type"]} {body["url"]}' if body.get('url') else body['type']]
@@ -354,7 +392,8 @@ def describe(action: dict) -> str:
         return f'+ create {kind} "{name}" ({", ".join(details)})'
     if action['action'] == 'update':
         changes = ', '.join(
-            f'{field} {json.dumps(action["before"].get(field))} -> {json.dumps(value)}' if field != 'password' else 'password'
+            f'{field} {json.dumps(action["before"].get(field))} -> {json.dumps(action["project_name"] if field == "project" else value)}'
+            if field != 'password' else 'password'
             for field, value in action['body'].items()
             if not (kind == 'contact' and field == 'config')
         )
@@ -364,6 +403,33 @@ def describe(action: dict) -> str:
     if action['action'] == 'delete':
         return f'- delete {kind} "{name}"'
     return f'! {kind} "{name}" is not in the manifest (apply --prune deletes it)'
+
+
+def is_link(action: dict) -> bool:
+    """Creating the project, or a monitor update that only moves the monitor into it: linking, which isn't drift."""
+    return action['kind'] == 'project' or (
+        action['kind'] == 'monitor' and action['action'] == 'update' and set(action['body']) == {'project'})
+
+
+def link_notes(links: list[dict], project_name: str) -> list[str]:
+    notes = []
+    if any(action['kind'] == 'project' for action in links):
+        notes.append(f'note: apply will create the project "{project_name}".')
+    monitors = [f'"{action["name"]}"' for action in links if action['kind'] == 'monitor']
+    if monitors:
+        notes.append(f'note: apply will link these monitors to the project "{project_name}": {", ".join(monitors)}.')
+    return notes
+
+
+def project_refusal(error: SyncError) -> str:
+    """The one line apply prints when the team can't have the project, before syncing without it."""
+    if error.status == 402:
+        plan = str(error.problem.get('plan') or '').capitalize()
+        limit = error.problem.get('max_projects', '?')
+        where = f'{limit} on the {plan} plan' if plan else f'{limit} on its plan'
+        return f'This team is at its project limit ({where}), so monitors are synced without a project.'
+    return ("This token can't create projects (it needs an Owner or Admin of the team), "
+            'so monitors are synced without a project.')
 
 
 def check_intervals(actions: list[dict], team: dict) -> None:
@@ -386,8 +452,23 @@ def check_intervals(actions: list[dict], team: dict) -> None:
 
 # ---------------------------------------------------------------- applying
 
-def apply_actions(api: Api, actions: list[dict]) -> None:
+def apply_actions(api: Api, actions: list[dict]) -> int:
+    """Make the changes and say each one. Returns how many were made. When the team can't have the project
+    (402 or 403), says so once and syncs the monitors without it, as against a server without projects."""
     contact_ids = {contact['name']: contact['id'] for contact in api.contacts()}
+    project_key, linking, made = None, True, 0
+
+    for action in [a for a in actions if a['kind'] == 'project']:
+        try:
+            project_key = api.ensure_project(action['name'])['key']
+        except SyncError as error:
+            if error.status not in (402, 403):
+                raise
+            print(project_refusal(error))
+            linking = False
+            continue
+        print(describe(action))
+        made += 1
 
     for action in [a for a in actions if a['kind'] == 'contact']:
         if action['action'] == 'create':
@@ -396,6 +477,7 @@ def apply_actions(api: Api, actions: list[dict]) -> None:
         else:
             api.request('PATCH', f'/notification-contacts/{action["id"]}', action['body'])
         print(describe(action))
+        made += 1
 
     for action in [a for a in actions if a['kind'] == 'monitor']:
         if action['action'] == 'orphan':
@@ -404,9 +486,16 @@ def apply_actions(api: Api, actions: list[dict]) -> None:
         if action['action'] == 'delete':
             api.request('DELETE', f'/monitors/{action["id"]}')
             print(describe(action))
+            made += 1
             continue
 
+        if not linking:
+            action = {**action, 'body': {key: value for key, value in action['body'].items() if key != 'project'}}
+            if not action['body']:
+                continue
         body = {key: value for key, value in action['body'].items() if key != 'notify'}
+        if 'project' in body and body['project'] is None:
+            body['project'] = project_key
         if 'notify' in action['body']:
             body['notification_contact_ids'] = [contact_ids[name] for name in action['body']['notify']]
         if action['action'] == 'create':
@@ -415,6 +504,9 @@ def apply_actions(api: Api, actions: list[dict]) -> None:
             body.pop('type', None)
             api.request('PATCH', f'/monitors/{action["id"]}', body)
         print(describe(action))
+        made += 1
+
+    return made
 
 
 def ping_urls(project: str, monitors: list[dict]) -> dict[str, str]:
@@ -456,6 +548,27 @@ def write_env_file(path: str, values: dict[str, str]) -> None:
 
 # ---------------------------------------------------------------- main
 
+def fold(text: str) -> str:
+    return ' '.join(text.casefold().split())
+
+
+def lookup_project(api: Api, manifest: dict) -> tuple:
+    """The manifest's All's Well project (None when there is none yet), and whether the server has projects at all."""
+    name = manifest['project'].strip()
+    try:
+        project = api.find_project(name)
+    except SyncError as error:
+        if error.status != 404:
+            raise
+        print(NO_PROJECTS)
+        return None, False
+
+    if project and fold(project['name']) != fold(name) and name != project['key']:
+        print(f'All\'s Well now calls this project "{project["name"]}". Keep "project": "{name}" in alls-well.json: '
+              'it still finds the project, and your monitors are named with it.')
+    return project, True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Sync alls-well.json with All's Well.")
     parser.add_argument('command', choices=('validate', 'plan', 'apply'))
@@ -471,11 +584,11 @@ def main(argv: list[str] | None = None) -> int:
         manifest = interpolate(manifest, missing)
 
         if args.command == 'validate':
-            print(f'{args.manifest} is valid: {len(manifest["monitors"])} monitors, {len(manifest.get("contacts", []))} contacts.')
+            print(f'{args.manifest} is valid: {len(manifest.get("monitors", []))} monitors, {len(manifest.get("contacts", []))} contacts.')
             if missing:
                 print(f'Set these before plan or apply: {", ".join(sorted(missing))}')
             defined = {contact['name'] for contact in manifest.get('contacts', [])}
-            named = {name for monitor in manifest['monitors'] for name in monitor.get('notify', manifest.get('notify', []))}
+            named = {name for monitor in manifest.get('monitors', []) for name in monitor.get('notify', manifest.get('notify', []))}
             if named - defined:
                 print(f'Not defined here, so these must already be contacts in the team (plan checks): '
                       f'{", ".join(sorted(named - defined))}')
@@ -488,7 +601,8 @@ def main(argv: list[str] | None = None) -> int:
             raise SyncError('Set ALLS_WELL_TOKEN to a team API token (Settings, API tokens; Owner or Admin).')
 
         api = Api(os.environ.get('ALLS_WELL_URL') or manifest.get('url') or DEFAULT_URL, token)
-        actions = plan_changes(manifest, api.monitors(), api.contacts(), args.prune)
+        project, projects_supported = lookup_project(api, manifest)
+        actions = plan_changes(manifest, api.monitors(), api.contacts(), args.prune, project, projects_supported)
         changes = [a for a in actions if a['action'] != 'orphan']
 
         creates = sum(1 for a in changes if a['kind'] == 'monitor' and a['action'] == 'create')
@@ -501,14 +615,19 @@ def main(argv: list[str] | None = None) -> int:
         check_intervals(changes, team)
 
         if args.command == 'plan':
+            # With --check, linking an in-step setup to its project is a note, so CI doesn't fail the day it arrives.
+            links = [a for a in changes if is_link(a)] if args.check else []
+            noted = {id(a) for a in links}
             for action in actions:
-                print(describe(action))
+                if id(action) not in noted:
+                    print(describe(action, planned=True))
+            for note in link_notes(links, project['name'] if project else manifest['project'].strip()):
+                print(note)
             if not changes:
                 print('No changes.')
-            return 2 if args.check and changes else 0
+            return 2 if args.check and len(changes) > len(links) else 0
 
-        apply_actions(api, actions)
-        if not changes:
+        if not apply_actions(api, actions):
             print('No changes.')
 
         urls = ping_urls(manifest['project'].strip(), api.monitors())

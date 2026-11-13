@@ -4,8 +4,8 @@ Skills that teach AI coding agents, such as Claude Code, Codex and Cursor, to wo
 
 | Skill | What it does |
 |---|---|
-| [`alls-well`](skills/alls-well/SKILL.md) | Sets up uptime, SSL certificate and heartbeat monitoring with [All's Well](https://alls-well.io) for the project the agent is working in, and keeps the setup in the repository as `alls-well.json`. [Docs](https://alls-well.io/docs/api/agent-skill) |
-| [`cloudflare-allowlist`](skills/cloudflare-allowlist/SKILL.md) | Lets Agile Pixel's services, starting with All's Well's uptime checks, through Cloudflare's WAF and bot protection when All's Well reports "Bot protection is blocking these checks". It finds the checker's addresses in Cloudflare's Security Events and adds one skip rule, through the Cloudflare MCP server, the `cf` CLI or the API |
+| [`alls-well`](skills/alls-well/SKILL.md) | Sets up uptime, SSL certificate and heartbeat monitoring with [All's Well](https://alls-well.io) for the project the agent is working in. It keeps the setup in the repository as `alls-well.json`, files the monitors under the codebase's All's Well project, and checks that each new monitor proves itself before its contacts are alerted. [Docs](https://alls-well.io/docs/api/agent-skill) |
+| [`cloudflare-allowlist`](skills/cloudflare-allowlist/SKILL.md) | Lets Agile Pixel's services, starting with All's Well's uptime checks, through Cloudflare's WAF and bot protection when All's Well reports a monitor as `blocked` ("Bot protection is blocking these checks"). It finds the checker's addresses in Cloudflare's Security Events and adds one skip rule, through the Cloudflare MCP server, the `cf` CLI or the API |
 
 ## Install
 
