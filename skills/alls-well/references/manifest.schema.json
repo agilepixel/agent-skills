@@ -4,7 +4,7 @@
   "title": "All's Well project manifest",
   "description": "A project's All's Well monitors and alert contacts, applied with alls_well_sync.py.",
   "type": "object",
-  "required": ["project", "monitors"],
+  "required": ["project"],
   "if": {"not": {"required": ["notify"]}},
   "then": {"properties": {"monitors": {"items": {"required": ["notify"]}}}},
   "additionalProperties": false,
@@ -13,7 +13,7 @@
     "project": {
       "type": "string",
       "minLength": 1,
-      "description": "Unique in the team. Every monitor is named '<project>: <name>'."
+      "description": "The All's Well project, shown on the website, and the prefix of every monitor: '<project>: <name>'. The sync creates the project when the team has none of that name or key."
     },
     "url": {
       "type": "string",
@@ -23,7 +23,7 @@
     "notify": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Contact names alerted by monitors that don't set their own notify. Without it, every monitor must set its own; [] alerts nobody on purpose."
+      "description": "Contact names alerted by monitors that don't set their own notify. Without it, every monitor must set its own; [] attaches no contacts on purpose, so the monitor alerts every confirmed contact on the team."
     },
     "contacts": {
       "type": "array",
@@ -31,7 +31,7 @@
     },
     "monitors": {
       "type": "array",
-      "minItems": 1,
+      "description": "Left out when monitors are recorded through MCP and the file only names the project.",
       "items": {"$ref": "#/$defs/monitor"}
     }
   },
@@ -70,7 +70,7 @@
         "check_interval_minutes": {"enum": [1, 5, 15, 30, 60], "default": 5},
         "check_interval_seconds": {"type": ["integer", "null"], "minimum": 30, "description": "Overrides the minutes; null removes the override."},
         "is_active": {"type": "boolean"},
-        "notify": {"type": "array", "items": {"type": "string"}, "description": "Replaces the top-level notify for this monitor. [] alerts nobody."},
+        "notify": {"type": "array", "items": {"type": "string"}, "description": "Replaces the top-level notify for this monitor. [] attaches none, so the monitor alerts every confirmed contact on the team."},
         "http_method": {"enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]},
         "expected_status_codes": {
           "type": "array",
