@@ -67,6 +67,8 @@ If checks fail with 401, 403 or 429 while the site works in a browser, a WAF, Cl
 - Allow-list those IP addresses, or
 - allow the user agent `AllsWell/1.0 AgileMonitor/1.0 (+https://alls-well.io)`.
 
+Behind Cloudflare, an agent with the `cloudflare-allowlist` skill can add the rule itself, through the Cloudflare MCP server, the CLI or the API, so this step isn't left to the person.
+
 ## Confirm alert email addresses
 
 Each new email contact, and each one whose address changed, gets an email from All's Well asking the person at that address to confirm. Until they click **Confirm alerts** on the page it links to, that contact gets no alerts. Tell each person to expect it, and to check spam if it doesn't arrive; it goes at most once every 10 minutes per address. **This wasn't me** declines the address for good on that team, and tells whoever added it. To alert an address that declined by mistake, an Owner or Admin adds it again on **Alert contacts** (`/contacts`).

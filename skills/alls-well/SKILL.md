@@ -48,7 +48,7 @@ Read the code for what can fail. Ask the person for anything you can't find; nev
 Before writing monitors, ask whether the team wants them recorded through MCP or in the manifest:
 
 - **In the manifest** is the flow below: the file lists every monitor, and `apply` makes All's Well match it.
-- **Through MCP:** the file holds just the project, `{"project": "Northwind shop"}`, and `apply` only makes sure the project exists. An agent with the All's Well MCP server then uses `create-project` (or `get-project` when it exists) and `move-to-project` to organise the items it records, and creates monitors with the `project` argument. Skip steps 3 to 5 for monitors recorded this way.
+- **Through MCP:** the file holds just the project, `{"project": "Northwind shop"}`. An agent with the All's Well MCP server uses `create-project` (or `get-project` when it exists) and `move-to-project` to organise the items it records, and creates monitors with the `project` argument. Skip step 3's monitor sync and step 5's `apply`: wire heartbeats from the URL `create-monitor` returns, and switch them on with `update-monitor`. Still do step 4, which applies to monitors made through MCP too, with the MCP calls it lists.
 
 Commit it at the project root:
 
@@ -120,6 +120,8 @@ curl -s "${ALLS_WELL_URL:-https://alls-well.io}/api/v1/monitors/<id>/checks" -H 
 curl -s "${ALLS_WELL_URL:-https://alls-well.io}/api/v1/notification-contacts" -H "Authorization: Bearer $ALLS_WELL_TOKEN"    # confirmation
 ```
 
+Through MCP, the same three reads are `get-monitor` (its `proving`, and held contacts with `held: true`), `list-recent-checks`, and `list-notification-contacts` (each contact's `confirmation`).
+
 Then tell the person:
 
 - which monitors are still proving, and that until then their alerts go only to the token's owner
@@ -156,7 +158,7 @@ These have no API. End your work with a checklist the person can follow, with th
 | WordPress sites | Installs the plugin from WordPress.org and clicks **Connect to All's Well** in its settings; for many sites, uses the team enrolment key |
 | A need for a public status page or a README badge | Creates the status page and adds the monitors; a badge needs the monitor on a public page |
 | Planned downtime | Adds a maintenance window |
-| A WAF, Cloudflare or bot protection in front of the site | Allow-lists the All's Well checkers |
+| A WAF, Cloudflare or bot protection in front of the site | Allow-lists the All's Well checkers. Behind Cloudflare, use the `cloudflare-allowlist` skill if you have it, and it's done for them |
 | Production secrets | Moves the `ALLS_WELL_PING_*` lines from `.alls-well.env` into production's environment, deletes the file, and sets the manifest's `${…}` variables wherever the sync runs |
 
 ## Alert Contacts

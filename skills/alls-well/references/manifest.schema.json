@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://alls-well.io/docs/api/skill/references/manifest.schema.json",
   "title": "All's Well project manifest",
-  "description": "A project's All's Well monitors and alert contacts, applied with alls_well_sync.py.",
+  "description": "A codebase's link to its All's Well project and, optionally, its monitors and alert contacts, applied with alls_well_sync.py.",
   "type": "object",
   "required": ["project"],
   "if": {"not": {"required": ["notify"]}},

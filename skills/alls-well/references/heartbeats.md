@@ -2,6 +2,8 @@
 
 A heartbeat monitor goes down when its job hasn't requested the ping URL within the check interval. Request the URL after the job **succeeds**, so a failing job goes quiet and alerts. GET, HEAD and POST all count; the body is ignored.
 
+A ping is recorded straight away (the URL answers `204`), but a heartbeat that is down only recovers at its next check, which can be up to one interval later. A `204` followed by "still down" doesn't mean the ping was lost.
+
 `apply --env-file .alls-well.env` writes each URL into that file as `ALLS_WELL_PING_<NAME>`; it never prints them (from the monitor's name in the manifest: "Nightly backup" becomes `ALLS_WELL_PING_NIGHTLY_BACKUP`). Read it from the environment; never write the URL into the repository.
 
 Use `curl -fsS --retry 3 --max-time 10 -o /dev/null` so a slow or failed ping never breaks the job and retries a blip.
@@ -26,6 +28,8 @@ Schedule::command('backup:run')->dailyAt('02:00')
 
 While a heartbeat is paused, its pings get a `404`, which the scheduler logs. Switch it on right after deploying.
 
+The scheduler itself only runs if something calls `php artisan schedule:run` every minute. Before trusting a scheduler heartbeat, confirm that call exists. On shared hosting it is usually set in the host's control panel (cron jobs), so `crontab -l` over SSH may show nothing. Check that it uses a PHP at least as new as the app needs: the plain `php` on many hosts is older, and `schedule:run` then fails silently every minute. Use the full path to the right PHP binary.
+
 A heartbeat the sync created proves itself with its first on-time ping after it is switched on. Until then its alerts go only to the token's owner and its `notify` contacts are held; they are attached by that ping. If no ping arrives within 7 days of it being switched on, the held contacts lapse and the token's owner gets an email.
 
 ### Queued jobs
@@ -44,7 +48,7 @@ public function handle(): void
 }
 ```
 
-A heartbeat on a frequently scheduled queued job also tells you the queue worker is alive.
+A heartbeat on a frequently scheduled queued job also tells you the queue worker is alive, but only if there is a worker. Check `config('queue.default')` first. With `sync`, as on many shared hosts, there is no worker: queued jobs run inline inside `schedule:run`, so a "Queue worker" heartbeat proves only that the scheduler runs. Name it "Scheduler" instead. Jobs left in the `jobs` table from before a switch to `sync` are never processed.
 
 If the job's class isn't in the repository (a package, or another service), leave its heartbeat paused and hand the snippet over to whoever owns the job.
 
