@@ -4,6 +4,8 @@ These parts of All's Well have no API, so an agent can't do them. Give the perso
 
 ## Connect a server
 
+With the All's Well MCP server, `create-server` registers the server and returns the same install command. Use these steps when it isn't available.
+
 The server agent reports disk usage, services, packages and reboots, and alerts when the server stops reporting.
 
 1. Open **Servers**, then **Add server** (`/servers/create`). Name it after the host (for example `shop-prod-1`) and pick how often it reports. The team's plan sets how many servers it can add and how often they can report (see `/pricing`).
@@ -47,6 +49,8 @@ The plugin reports WordPress, plugin and theme versions, available updates and s
 5. Connecting a new site also adds an `http` monitor on its home page and an `ssl` monitor, unless the team already has one of that kind on the same host or the plan has no room left. They are named after the site, not with the project's prefix, so the sync neither adopts nor prunes them: don't add the same checks to the manifest, or the site is checked twice. `list-monitors` shows them. A site that misses three reports in a row also goes down and alerts the team.
 
 ## Status page and badges
+
+With the All's Well MCP server, `create-status-page`, `set-status-page-domain` and `verify-status-page-domain` do steps 1 and 2. A badge has no tool.
 
 1. **Status pages, New status page** (`/status-pages/create`): name it, make it public, and add the monitors customers care about.
 2. For a custom domain such as `status.example.com`, add the two DNS records the edit page shows: a CNAME to the All's Well host and a TXT record at `_alls-well.status.example.com`. Then click **Verify domain**.

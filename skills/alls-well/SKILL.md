@@ -17,6 +17,10 @@ Trigger this skill when asked to:
 
 For a one-off question answered in conversation, an AI assistant can use the All's Well MCP server instead (`${ALLS_WELL_URL:-https://alls-well.io}/docs/api/mcp.md`). For anything that belongs to a project, use the manifest below.
 
+## At the Start of a Session
+
+In a codebase with an `alls-well.json` and the All's Well MCP server, call `check-project` with its `project` value and tell the person what needs attention before your task. When nothing does, say all's well in one line; if the answer also has a `not_checked` entry, that line includes its summary. Never ask them to change the `project` value: it is also every monitor's name prefix. A `not_checked` vulnerability or security support result means nobody looked, so never treat it as clear.
+
 ## Before You Start
 
 | Need | How |
@@ -150,17 +154,30 @@ Right after the change is deployed with the variables set in production, set `"i
 
 ## 6. Hand Over What Only a Person Can Do
 
-These have no API. End your work with a checklist the person can follow, with the exact steps from `references/manual-steps.md`:
+With the MCP server, servers, sites and status pages can be set up from a session. Without it, or for anything below that still needs a person, use `references/manual-steps.md`.
+
+| Set up | Through MCP |
+|---|---|
+| A server | `create-server` returns the install command. Hand it to the person to run on the host as root, or run it yourself if you have access. It holds the server's secret, so don't repeat it in chat |
+| A WordPress, Laravel or PHP site | `create-site` returns the connect steps. Give the person the steps to run or click; they hold the site's secret |
+| A status page | `create-status-page`, then `set-status-page-domain` for a custom domain. Give the person the DNS records it returns, then `verify-status-page-domain` |
+
+A server or site you register proves itself with its first report. Until then its alerts reach only the person you act for, and requested contacts are held. A README badge has no tool: add the markdown from `references/manual-steps.md` yourself, for a monitor on a public status page.
+
+For anything the MCP tools above don't cover, these have no API. End your work with a checklist the person can follow, with the exact steps from `references/manual-steps.md`:
 
 | When the project has | The person |
 |---|---|
-| Servers (VPS, droplet, EC2) | Creates each in **Servers**, then runs its one-line install command on the server as root |
-| WordPress sites | Installs the plugin from WordPress.org and clicks **Connect to All's Well** in its settings; for many sites, uses the team enrolment key |
-| A need for a public status page or a README badge | Creates the status page and adds the monitors; a badge needs the monitor on a public page |
+| WordPress sites | Installs the plugin from WordPress.org, then connects it with the steps `create-site` returned, or with **Connect to All's Well** in its settings; for many sites, uses the team enrolment key |
 | Planned downtime | Adds a maintenance window |
 | An outage or maintenance to tell subscribers about | Opens the review link from `draft-notice` and publishes it; an agent can only draft status page notices, including a new end time when maintenance runs over |
 | A WAF, Cloudflare or bot protection in front of the site | Allow-lists the All's Well checkers. Behind Cloudflare, use the `cloudflare-allowlist` skill if you have it, and it's done for them |
 | Production secrets | Moves the `ALLS_WELL_PING_*` lines from `.alls-well.env` into production's environment, deletes the file, and sets the manifest's `${…}` variables wherever the sync runs |
+
+## Incidents and Updates
+
+- **Diagnose an incident with `get-incident` before acting.** Offer a fix only if the cause is in the code or config you are working on; otherwise explain what you found and suggest next steps.
+- **Before applying any update,** call `find-updates` with the component names (an exact, case-insensitive match). Then: confirm a recent backup exists, or ask the person to take one, and say how to roll back; prefer a staging copy if there is one; update one thing at a time; watch the project's checks afterwards. Each site's `backup` shows when the heartbeat marked `is_backup` in that site's project last succeeded. Never update without confirming a recent backup.
 
 ## Alert Contacts
 
@@ -185,6 +202,7 @@ An email contact created or changed through the API stays `confirmation: pending
 | Name a monitor without the project's prefix | Let the sync name it from `project` |
 | Create a heartbeat active before its ping is deployed | `"is_active": false`, then switch it on after the deploy |
 | Make a heartbeat's interval equal to the job's period | Add the run time and a margin |
+| Update a plugin or package without a recent backup | Run `find-updates`, confirm the backup, update one thing at a time |
 | Run `apply --prune` unasked | Show the `plan`; prune only on request |
 | Tell the person their alerts are set up as soon as `apply` finishes | Check the first results (step 4): say which monitors are proving, which contacts are held and which addresses must confirm |
 
@@ -199,5 +217,5 @@ An email contact created or changed through the API stays `confirmation: pending
 | Daily job's interval? | `check_interval_seconds: 90000` |
 | Slack contact? | `{"webhook_url": "..."}` |
 | Plan full? | `402` with `monitor-limit-reached`: drop monitors or ask an Owner to upgrade |
-| Server or WordPress? | A person does it: `references/manual-steps.md` |
+| Server or site? | `create-server` or `create-site` over MCP, then the person runs the install command or connects the add-on. Without MCP: `references/manual-steps.md` |
 | Why didn't a contact get the alert? | The monitor is still proving (alerts go only to the token's owner), or the contact is `pending` or `declined` |

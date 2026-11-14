@@ -1,6 +1,6 @@
 ---
 name: cloudflare-allowlist
-description: Use when an All's Well monitor or its checks report the status `blocked`, or its page says "Bot protection is blocking these checks", or a check fails with 401, 403 or 429 while the site works in a browser, and the site is behind Cloudflare; or when asked to allow-list All's Well or another Agile Pixel service in Cloudflare's WAF, Bot Fight Mode, Super Bot Fight Mode, Under Attack mode or security level. Finds the checker's addresses in Cloudflare's Security Events and adds one skip rule through the Cloudflare MCP server, the cf CLI or the API.
+description: Use when an All's Well monitor or its checks report the status `blocked`, its check-in lists a blocked monitor, an incident names bot protection, or a monitor's page says "Bot protection is blocking these checks", or a check fails with 401, 403 or 429 while the site works in a browser, and the site is behind Cloudflare; or when asked to allow-list All's Well or another Agile Pixel service in Cloudflare's WAF, Bot Fight Mode, Super Bot Fight Mode, Under Attack mode or security level. Finds the checker's addresses in Cloudflare's Security Events and adds one skip rule through the Cloudflare MCP server, the cf CLI or the API.
 ---
 
 # Let Agile Pixel Services Through Cloudflare
@@ -10,6 +10,8 @@ You get Agile Pixel's services past Cloudflare's protection on a site without we
 ## When This Applies
 
 - All's Well reports a monitor or its checks as `blocked`: in the API, `status` from `GET /api/v1/monitors/{id}` and `GET /api/v1/monitors/{id}/checks`; over its MCP server, `get-monitor`, `list-monitors` and `list-recent-checks`
+- All's Well's check-in (`check-project` over MCP) lists a blocked monitor among the items that need attention
+- A check's `error_message` starts `Blocked by Cloudflare's bot protection`, or an incident's evidence (`get-incident` over MCP) has a `bot_protection` whose `provider` is `Cloudflare`. Another provider, such as `Blocked by 20i StackProtect`, isn't Cloudflare: hand over the monitor page's steps
 - All's Well shows **Bot protection is blocking these checks** on a monitor, or a check fails with 401, 403 or 429 while the page loads in a browser
 - The person asks to allow-list or whitelist All's Well, or another Agile Pixel service, in Cloudflare
 - You are setting up All's Well monitors (the `alls-well` skill) for a host served through Cloudflare and its zone has Bot Fight Mode, Super Bot Fight Mode, Under Attack mode or its own block or challenge rules: offer the rule before the first check fails
@@ -24,7 +26,7 @@ This skill covers Cloudflare only. For another CDN or firewall service (Sucuri, 
 
 | Service | Reaches the site as | User agent | Addresses |
 |---|---|---|---|
-| All's Well uptime checks (`http` and `keyword` monitors) | HTTP requests to the monitored URL | `AllsWell/1.0 AgileMonitor/1.0 (+https://alls-well.io)` | Listed on the failing monitor's page in All's Well |
+| All's Well uptime checks (`http` and `keyword` monitors) | HTTP requests to the monitored URL | `AllsWell/1.0 AgileMonitor/1.0 (+https://alls-well.io)` | Listed on the failing monitor's page in All's Well, and in `get-incident`'s `bot_protection` (step 3) |
 
 Only these need a rule. All's Well's heartbeats, server agent and WordPress plugin send from the site to All's Well, so they never pass through the site's Cloudflare, and `ssl`, `tcp` and `icmp` monitors never reach the WAF.
 
@@ -90,7 +92,14 @@ query ($zoneTag: string, $since: Time) {
 
 ## 3. Confirm the Addresses
 
-Allow an address only when it is on the list the failing monitor's page in All's Well shows, or the person confirms it. Ask the person to copy that list. If the All's Well API reference (`${ALLS_WELL_URL:-https://alls-well.io}/docs/api.md`) documents an endpoint for the checkers' addresses, read them from there instead.
+Allow an address only when it is on All's Well's own list of checker addresses, or the person confirms it. All's Well gives the same list in two places; use the first you can:
+
+| Where | When |
+|---|---|
+| `bot_protection.help.ip_addresses` from `get-incident` over All's Well's MCP server, with the checker's `user_agent` beside it | The monitor has an incident whose evidence names bot protection |
+| The failing monitor's page in All's Well: ask the person to copy the list from it | Otherwise. A `blocked` monitor alone opens no incident, so this is the only place for it |
+
+The REST API and the other MCP tools don't list the addresses.
 
 An address that sent the user agent but isn't on All's Well's list could be anyone. Show it to the person and leave it out.
 
@@ -206,7 +215,7 @@ When the person, or whoever owns the Cloudflare account, has to add it in the da
 | Did the fix work? | Security Events show `skip`, and the monitor's newest checks are `up`; 3 in a row prove a proving monitor |
 | Is Cloudflare in front? | `server: cloudflare` and `cf-ray`; a challenge adds `cf-mitigated: challenge` |
 | The checker's user agent? | `AllsWell/1.0 AgileMonitor/1.0 (+https://alls-well.io)` |
-| The checker's addresses? | The failing monitor's page in All's Well, matched with Security Events |
+| The checker's addresses? | `get-incident`'s `bot_protection.help.ip_addresses`, when there is an incident, or the failing monitor's page in All's Well; matched with Security Events |
 | Which phase? | `http_request_firewall_custom`; the rule's `ref` is `agile_pixel_services`, placed first |
 | Bot Fight Mode? | No rule skips it: an IP Access allow per address, or the person turns it off |
 | Validate without changing anything? | `?dry_run=true`, or `cf … --validate-only` |
