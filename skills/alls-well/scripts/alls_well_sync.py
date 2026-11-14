@@ -406,9 +406,11 @@ def describe(action: dict, planned: bool = False) -> str:
 
 
 def is_link(action: dict) -> bool:
-    """Creating the project, or a monitor update that only moves the monitor into it: linking, which isn't drift."""
+    """Creating the project, or a monitor update that only moves a monitor in no project into it: linking, which isn't drift.
+    Moving one out of another project is drift."""
     return action['kind'] == 'project' or (
-        action['kind'] == 'monitor' and action['action'] == 'update' and set(action['body']) == {'project'})
+        action['kind'] == 'monitor' and action['action'] == 'update' and set(action['body']) == {'project'}
+        and action['before'].get('project') is None)
 
 
 def link_notes(links: list[dict], project_name: str) -> list[str]:

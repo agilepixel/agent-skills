@@ -158,6 +158,7 @@ These have no API. End your work with a checklist the person can follow, with th
 | WordPress sites | Installs the plugin from WordPress.org and clicks **Connect to All's Well** in its settings; for many sites, uses the team enrolment key |
 | A need for a public status page or a README badge | Creates the status page and adds the monitors; a badge needs the monitor on a public page |
 | Planned downtime | Adds a maintenance window |
+| An outage or maintenance to tell subscribers about | Opens the review link from `draft-notice` and publishes it; an agent can only draft status page notices, including a new end time when maintenance runs over |
 | A WAF, Cloudflare or bot protection in front of the site | Allow-lists the All's Well checkers. Behind Cloudflare, use the `cloudflare-allowlist` skill if you have it, and it's done for them |
 | Production secrets | Moves the `ALLS_WELL_PING_*` lines from `.alls-well.env` into production's environment, deletes the file, and sets the manifest's `${…}` variables wherever the sync runs |
 
