@@ -1,6 +1,6 @@
 ---
 name: alls-well
-description: Use when adding uptime monitoring, heartbeat or cron-job monitoring, SSL certificate checks, downtime alerts or a status badge to a project with All's Well, or when connecting a project's servers, WordPress sites or deploy pipeline to All's Well.
+description: Use when adding uptime, heartbeat or cron-job monitoring, SSL checks, downtime alerts or a status badge to a project with All's Well (alls-well.io, formerly AgileMonitor); starting work in a codebase that has an alls-well.json; asking what needs attention in a project, or what caused an All's Well incident; updating a plugin, theme or package on a monitored site; or connecting a project's servers, sites, deploy pipeline, status page or maintenance notice to All's Well.
 ---
 
 # All's Well
